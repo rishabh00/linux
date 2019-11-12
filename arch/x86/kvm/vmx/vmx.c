@@ -45,6 +45,9 @@
 #include <asm/virtext.h>
 #include <asm/vmx.h>
 
+#include <linux/time.h>
+#include <stdatomic.h>
+
 #include "capabilities.h"
 #include "cpuid.h"
 #include "evmcs.h"
@@ -63,6 +66,9 @@
 
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
+
+atomic_uint total_exit = 0;
+atomic_ullong total_time = 0;
 
 static const struct x86_cpu_id vmx_cpu_id[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_VMX),
@@ -5616,6 +5622,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 static const int kvm_vmx_max_exit_handlers =
 	ARRAY_SIZE(kvm_vmx_exit_handlers);
 
+struct exit_info exit_info_array[100] = {0};
+
 static void vmx_get_exit_info(struct kvm_vcpu *vcpu, u64 *info1, u64 *info2)
 {
 	*info1 = vmcs_readl(EXIT_QUALIFICATION);
@@ -5860,10 +5868,13 @@ void dump_vmcs(void)
  */
 static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 {
+	static int result;
+	unsigned long long start_t=0, end_t=0, total_t;
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	u32 exit_reason = vmx->exit_reason;
 	u32 vectoring_info = vmx->idt_vectoring_info;
 
+	atomic_fetch_add_explicit(&total_exit, 1, memory_order_relaxed);
 	trace_kvm_exit(exit_reason, vcpu, KVM_ISA_VMX);
 
 	/*
@@ -5945,8 +5956,23 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 	}
 
 	if (exit_reason < kvm_vmx_max_exit_handlers
-	    && kvm_vmx_exit_handlers[exit_reason])
-		return kvm_vmx_exit_handlers[exit_reason](vcpu);
+	    && kvm_vmx_exit_handlers[exit_reason]){
+
+		start_t = rdtsc();	
+		result = kvm_vmx_exit_handlers[exit_reason](vcpu);
+		end_t = rdtsc();
+		total_t =  (end_t - start_t)/CLOCKS_PER_SEC;
+		
+		//exit_info_array[exit_reason].no_of_exit++;
+		atomic_fetch_add_explicit(&exit_info_array[exit_reason].no_of_exit, 1, memory_order_relaxed);
+
+		//exit_info_array[exit_reason].time_spent = (atomic_int)total_t;
+		atomic_fetch_add_explicit(&exit_info_array[exit_reason].time_spent, total_t, memory_order_relaxed);
+
+		//total_time = total_time + (atomic_int)total_t;	
+		atomic_fetch_add_explicit(&total_time, total_t, memory_order_relaxed);
+		return result;
+	}
 	else {
 		vcpu_unimpl(vcpu, "vmx: unexpected exit reason 0x%x\n",
 				exit_reason);

@@ -9,6 +9,7 @@
  * Copyright IBM Corporation, 2008
  */
 
+
 #include <linux/kvm_host.h>
 #include <linux/export.h>
 #include <linux/vmalloc.h>
@@ -23,6 +24,14 @@
 #include "mmu.h"
 #include "trace.h"
 #include "pmu.h"
+#include "vmx/vmx.h"
+
+#include <stdatomic.h>
+
+extern atomic_uint total_exit;
+extern atomic_ullong total_time;
+extern struct exit_info *exit_info_array;
+
 
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
@@ -1046,7 +1055,27 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	switch(eax){
+		case 0x4FFFFFFF:
+			eax = (u32)(total_exit);
+		       	ebx = ecx = edx = 0;	
+			break;
+		case 0x4FFFFFFE:
+			ebx = (u32)( total_time >> 32 );
+		       	ecx = (u32)( total_time & 0xFFFFFFFF);
+			eax = edx = 0;	
+			break;
+		case 0x4FFFFFFD:
+			eax = (u32)( exit_info_array[ecx].no_of_exit );
+			break;
+		case 0x4FFFFFFC:
+			ebx = (u32)( exit_info_array[ecx].time_spent >> 32 );
+			ecx = (u32)( exit_info_array[ecx].time_spent & 0xFFFFFFFF );
+			break;
+		default:
+			kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+			break;
+	}
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);

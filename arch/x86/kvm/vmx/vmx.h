@@ -6,6 +6,7 @@
 
 #include <asm/kvm.h>
 #include <asm/intel_pt.h>
+#include <stdatomic.h>
 
 #include "capabilities.h"
 #include "ops.h"
@@ -301,6 +302,11 @@ struct kvm_vmx {
 
 	enum ept_pointers_status ept_pointers_match;
 	spinlock_t ept_pointer_lock;
+};
+
+struct exit_info {
+	atomic_uint no_of_exit;
+	atomic_ullong time_spent;
 };
 
 bool nested_vmx_allowed(struct kvm_vcpu *vcpu);
