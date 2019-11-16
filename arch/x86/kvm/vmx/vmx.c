@@ -69,6 +69,7 @@ MODULE_LICENSE("GPL");
 
 atomic_uint total_exit = 0;
 atomic_ullong total_time = 0;
+struct exit_info exit_info_array[100] = {0};
 
 static const struct x86_cpu_id vmx_cpu_id[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_VMX),
@@ -5622,7 +5623,6 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 static const int kvm_vmx_max_exit_handlers =
 	ARRAY_SIZE(kvm_vmx_exit_handlers);
 
-struct exit_info exit_info_array[100] = {0};
 
 static void vmx_get_exit_info(struct kvm_vcpu *vcpu, u64 *info1, u64 *info2)
 {
@@ -5869,7 +5869,7 @@ void dump_vmcs(void)
 static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 {
 	static int result;
-	unsigned long long start_t=0, end_t=0, total_t;
+	unsigned long long start_t=0, end_t=0, total_t=0;
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	u32 exit_reason = vmx->exit_reason;
 	u32 vectoring_info = vmx->idt_vectoring_info;
