@@ -1046,9 +1046,19 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+int value_in_array( u32 value, u32 arr[]){
+	int i;
+	for( i=0; i< (sizeof(arr)/sizeof(arr[0])); i++){
+		if( arr[i] == value ) return 1;
+	}
+	return 0;
+}
+
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
+	u32 sdm_array[] = { 35, 38, 42, 65 }; // undfined exit reasons
+	u32 kvm_array[] = { 3, 4, 5, 6, 16, 17, 33, 34, 51, 66}; // exit reasons not enabled in KVM
 
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
 		return 1;
@@ -1061,23 +1071,44 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 			eax = (u32)(total_exit);
 		       	ebx = ecx = edx = 0;	
 			break;
+
 		case 0x4FFFFFFE:
 			ebx = (u32)( total_time >> 32 );
 		       	ecx = (u32)( total_time & 0xFFFFFFFF);
 			eax = edx = 0;	
 			break;
+
 		case 0x4FFFFFFD:
-			if( ecx < 100 )
-				eax = (u32)( exit_info_array[ecx].no_of_exit );
-			ebx = ecx = edx = 0;
+			if( ecx <= 68 && !value_in_array(ecx, sdm_array )){
+				if( !value_in_array(ecx, kvm_array )){
+					eax = (u32)( exit_info_array[ecx].no_of_exit );
+					ebx = ecx = edx = 0;
+				} else {
+					eax = ebx = ecx = edx = 0; // exit reason not enabled in in KVM
+				}
+			} else {
+				// Value not defined in SDM
+				eax = ebx = ecx = 0;
+				edx = 0xFFFFFFFF;
+			}	
 			break;
+
 		case 0x4FFFFFFC:
-			if(ecx<100){
-				ebx = (u32)( exit_info_array[ecx].time_spent >> 32 );
-				ecx = (u32)( exit_info_array[ecx].time_spent & 0xFFFFFFFF );
-			}
-			eax = edx = 0;
+			if( ecx <= 68 && !value_in_array(ecx, sdm_array )){
+				if( !value_in_array(ecx, kvm_array )){
+					ebx = (u32)( exit_info_array[ecx].time_spent >> 32 );
+					ecx = (u32)( exit_info_array[ecx].time_spent & 0xFFFFFFFF );
+					eax = edx = 0;
+				} else {
+					eax = ebx = ecx = edx = 0; // exit reason not enabled in in KVM
+				}
+			} else {
+				// Value not defined in SDM
+				eax = ebx = ecx = 0;
+				edx = 0xFFFFFFFF;
+			}	
 			break;
+
 		default:
 			kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
 			break;
