@@ -67,9 +67,10 @@
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
 
-atomic_uint total_exit = 0;
-atomic_ullong total_time = 0;
-struct exit_info exit_info_array[100] = {0};
+extern atomic_t total_exit;
+extern atomic64_t total_time;
+extern atomic_t exit_type_count_array[69];
+extern atomic64_t exit_type_time_array[69];
 
 static const struct x86_cpu_id vmx_cpu_id[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_VMX),
@@ -5874,7 +5875,8 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 	u32 exit_reason = vmx->exit_reason;
 	u32 vectoring_info = vmx->idt_vectoring_info;
 
-	atomic_fetch_add_explicit(&total_exit, 1, memory_order_relaxed);
+	//atomic_fetch_add_explicit(&total_exit, 1, memory_order_relaxed);
+	atomic_inc(&total_exit);
 	trace_kvm_exit(exit_reason, vcpu, KVM_ISA_VMX);
 
 	/*
@@ -5961,16 +5963,16 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 		start_t = rdtsc();	
 		result = kvm_vmx_exit_handlers[exit_reason](vcpu);
 		end_t = rdtsc();
-		total_t =  (end_t - start_t)/CLOCKS_PER_SEC;
+		total_t =  end_t - start_t;
 		
-		//exit_info_array[exit_reason].no_of_exit++;
-		atomic_fetch_add_explicit(&exit_info_array[exit_reason].no_of_exit, 1, memory_order_relaxed);
+		atomic_inc(&exit_type_count_array[exit_reason]);
+		//atomic_fetch_add_explicit(&exit_info_array[exit_reason].no_of_exit, 1, memory_order_relaxed);
 
-		//exit_info_array[exit_reason].time_spent = (atomic_int)total_t;
-		atomic_fetch_add_explicit(&exit_info_array[exit_reason].time_spent, total_t, memory_order_relaxed);
+		atomic64_add(total_t, &exit_type_time_array[exit_reason]);
+		//atomic_fetch_add_explicit(&exit_info_array[exit_reason].time_spent, total_t, memory_order_relaxed);
 
-		//total_time = total_time + (atomic_int)total_t;	
-		atomic_fetch_add_explicit(&total_time, total_t, memory_order_relaxed);
+		atomic64_add(total_t, &total_time);	
+		//atomic_fetch_add_explicit(&total_time, total_t, memory_order_relaxed);
 		return result;
 	}
 	else {

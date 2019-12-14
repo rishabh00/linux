@@ -24,14 +24,16 @@
 #include "mmu.h"
 #include "trace.h"
 #include "pmu.h"
-#include "vmx/vmx.h"
 
-#include <stdatomic.h>
+atomic_t total_exit = ATOMIC_INIT(0);
+atomic64_t total_time = ATOMIC_INIT(0);
+atomic_t exit_type_count_array[69] = { ATOMIC_INIT(0) };
+atomic64_t exit_type_time_array[69] = { ATOMIC_INIT(0) };
 
-extern atomic_uint total_exit;
-extern atomic_ullong total_time;
-extern struct exit_info exit_info_array[100];
-
+EXPORT_SYMBOL(total_exit);
+EXPORT_SYMBOL(total_time);
+EXPORT_SYMBOL(exit_type_count_array);
+EXPORT_SYMBOL(exit_type_time_array);
 
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
@@ -1068,20 +1070,20 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	switch(eax){
 		case 0x4FFFFFFF:
-			eax = (u32)(total_exit);
+			eax = atomic_read(&total_exit);
 		       	ebx = ecx = edx = 0;	
 			break;
 
 		case 0x4FFFFFFE:
-			ebx = (u32)( total_time >> 32 );
-		       	ecx = (u32)( total_time & 0xFFFFFFFF);
+			ebx = (u32)(atomic64_read( &total_time ) >> 32 );
+		       	ecx = (u32)(atomic64_read( &total_time) & 0xFFFFFFFF);
 			eax = edx = 0;	
 			break;
 
 		case 0x4FFFFFFD:
 			if( ecx <= 68 && !value_in_array(ecx, sdm_array )){
 				if( !value_in_array(ecx, kvm_array )){
-					eax = (u32)( exit_info_array[ecx].no_of_exit );
+					eax = atomic_read( &exit_type_count_array[ecx] );
 					ebx = ecx = edx = 0;
 				} else {
 					eax = ebx = ecx = edx = 0; // exit reason not enabled in in KVM
@@ -1096,8 +1098,8 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 		case 0x4FFFFFFC:
 			if( ecx <= 68 && !value_in_array(ecx, sdm_array )){
 				if( !value_in_array(ecx, kvm_array )){
-					ebx = (u32)( exit_info_array[ecx].time_spent >> 32 );
-					ecx = (u32)( exit_info_array[ecx].time_spent & 0xFFFFFFFF );
+					ebx = (u32)(atomic64_read( &exit_type_time_array[ecx]) >> 32 );
+					ecx = (u32)(atomic64_read( &exit_type_time_array[ecx]) & 0xFFFFFFFF );
 					eax = edx = 0;
 				} else {
 					eax = ebx = ecx = edx = 0; // exit reason not enabled in in KVM

@@ -6,7 +6,6 @@
 
 #include <asm/kvm.h>
 #include <asm/intel_pt.h>
-#include <stdatomic.h>
 
 #include "capabilities.h"
 #include "ops.h"
@@ -305,8 +304,8 @@ struct kvm_vmx {
 };
 
 struct exit_info {
-	atomic_uint no_of_exit;
-	atomic_ullong time_spent;
+	atomic_t no_of_exit;
+	atomic64_t time_spent;
 };
 
 bool nested_vmx_allowed(struct kvm_vcpu *vcpu);
